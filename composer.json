@@ -1,0 +1,8 @@
+{
+    "require": {
+        "guzzlehttp/guzzle": "^7.8",
+        "ydb-platform/ydb-php-sdk": "^1.12",
+        "thingengineer/mysqli-database-class": "dev-master",
+        "vlucas/phpdotenv": "^5.6"
+    }
+}

@@ -1,0 +1,5 @@
+/cookieFileName
+/.env
+/composer.lock
+/vendor/
+/auth.json
