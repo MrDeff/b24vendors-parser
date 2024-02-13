@@ -8,9 +8,9 @@ require_once 'Database.php';
 require_once 'ParseVendors.php';
 
 //$db = new YdbBase();
-$db = new Database();
 $dateTime = new DateTime(date('d.m.Y'));
 $parse = new ParseVendors($dateTime);
+$db = new Database();
 // Ежедневные
 $paymentList = $parse->getPayments();
 foreach ($paymentList as $paymentItem) {
