@@ -108,6 +108,10 @@ class ParseVendors
                         $value = (new \DateTime($value))->format('Y-m-d');
                     }
 
+                    if ($keyName === 'SUBSCRIPTION_START' || $keyName === 'SUBSCRIPTION_END') {
+                        $value = (new \DateTime($value))->format('Y-m-d');
+                    }
+
                     $payment[$keyName] = $value;
                 }
                 if (!empty($payment['ID']))
