@@ -58,6 +58,9 @@ class YdbBase
                     ->addColumn('AMOUNT', 'UTF8')
                     ->addColumn('ALL_AMOUNT', 'UTF8')
                     ->addColumn('CURRENCY', 'UTF8')
+                    ->addColumn('SUBSCRIPTION_END', 'UTF8')
+                    ->addColumn('SUBSCRIPTION_START', 'UTF8')
+                    ->addColumn('VERSION', 'UTF8')
                     ->primaryKey('ID')
             );
 
