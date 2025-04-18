@@ -63,7 +63,7 @@ class ParseVendors
         if ($this->debug)
             file_put_contents(__DIR__ . '/log_auth.html', $authContent);
 
-        preg_match_all("/'bitrix_sessid':'(.*)'/", $authContent, $sessIds);
+        preg_match_all('/"bitrix_sessid":"([a-f0-9]+)"/', $authContent, $sessIds);
         if (!empty($sessIds) && !empty($sessIds[1])) {
             $this->sessionId = current($sessIds[1]);
         } else {
