@@ -13,11 +13,18 @@ $parse = new ParseVendors($dateTime);
 $db = new Database();
 // Ежедневные
 $paymentList = $parse->getPayments();
-foreach ($paymentList as $paymentItem) {
-    $db->upsert('payments', $paymentItem);
+if (!empty($paymentList)) {
+    $db->clearPayments($dateTime->format('Y-m-01'));
+    foreach ($paymentList as $paymentItem) {
+        $db->upsert('payments', $paymentItem);
+    }
 }
+
 // Премиальные
 $premiumPaymentList = $parse->getPremiumPayments();
-foreach ($premiumPaymentList as $premiumItem) {
-    $db->upsert('payments_premium', $premiumItem);
+if (!empty($premiumPaymentList)) {
+    $db->clearPremiumPayments($dateTime->format('Y-m-01'));
+    foreach ($premiumPaymentList as $premiumItem) {
+        $db->upsert('payments_premium', $premiumItem);
+    }
 }

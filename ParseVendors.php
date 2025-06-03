@@ -12,7 +12,7 @@ class ParseVendors
     private static string $dailyPaymentsUrl = '/sale/payout.php';
     private static string $appListUrl = '/app/';
     private static string $appClientListUrl = '/sale/clients.php';
-    private bool $debug = false;
+    private bool $debug = true;
     private string|null $sessionId = null;
 //    private $cookieJar;
     private ?DateTime $dateTime;
@@ -23,7 +23,6 @@ class ParseVendors
         $dotenv->load();
 
         $this->dateTime = $dateTime;
-//        $this->cookieJar = new \GuzzleHttp\Cookie\FileCookieJar('vendors-cookie');
         $config = [
             'base_uri' => static::$baseUrl,
             'allow_redirects' => true,
@@ -33,7 +32,6 @@ class ParseVendors
                 'Content-Type' => 'application/x-www-form-urlencoded',
                 'X-Bitrix-Site-Id' => 'mv'
             ],
-//            'cookies' => $this->cookieJar,
             'curl' => [
                 CURLOPT_COOKIEJAR => __DIR__ . DIRECTORY_SEPARATOR . 'file.txt',
                 CURLOPT_COOKIEFILE => __DIR__ . DIRECTORY_SEPARATOR . 'file.txt',
@@ -63,9 +61,11 @@ class ParseVendors
         if ($this->debug)
             file_put_contents(__DIR__ . '/log_auth.html', $authContent);
 
-        preg_match_all('/"bitrix_sessid":"([a-f0-9]+)"/', $authContent, $sessIds);
+        $pattern = '/"bitrix_sessid":"([a-f0-9]+)"/';
+        preg_match($pattern, $authContent, $sessIds);
+
         if (!empty($sessIds) && !empty($sessIds[1])) {
-            $this->sessionId = current($sessIds[1]);
+            $this->sessionId = $sessIds[1];
         } else {
             throw new \Exception('auth error');
         }
@@ -169,7 +169,6 @@ class ParseVendors
 
     private function getSessionId()
     {
-//        $listQuery = $this->client->get(static::$dailyPaymentsUrl);
         $listQuery = $this->client->request('GET', static::$dailyPaymentsUrl, [
         ]);
         $listQueryHtml = $listQuery->getBody()->getContents();
@@ -317,86 +316,152 @@ class ParseVendors
                 $cellsDataActions = $xpath->query("td/span/a[@class='main-grid-row-action-button']/@data-actions", $row);
 
                 foreach ($cellsDataActions as $cellsDataAction) {
-                    $pattern = "/'onclick':'bx24vendorClients\((\d+)\)'/";
-                    preg_match($pattern, $cellsDataAction->nodeValue, $matches);
                     $id = null;
-                    if (isset($matches[1])) {
-                        $id = $matches[1];
+                    $jsonActionArray = json_decode(substr($cellsDataAction->nodeValue, 1, -1), true);
+                    foreach ($jsonActionArray as $jsonAction) {
+                        if ($jsonAction['className'] == 'edit') {
+                            $id = str_replace(['bx24vendorClients(', ')'], '', $jsonAction['onclick']);
+                        }
                     }
+
                     $rowData['id'] = $id;
                 }
 
                 foreach ($cellsData as $index => $cell) {
                     $rowData[$headersData[$index]] = $cell->nodeValue;
                 }
-                $result[] = $rowData;
+                $rowDataModify = [
+                    'id' => $rowData['id'],
+                ];
+
+                if (!empty($rowData['Регион'])) {
+                    $rowDataModify['region'] = $rowData['Регион'];
+                }
+
+                if (!empty($rowData['Код приложения'])) {
+                    $rowDataModify['code'] = $rowData['Код приложения'];
+                }
+
+                if (!empty($rowData['Приложение'])) {
+                    $rowDataModify['name'] = $rowData['Приложение'];
+                }
+
+                if (!empty($rowData['Активно'])) {
+                    $rowDataModify['active'] = $rowData['Активно'] == 'Да' ? 1 : 0;
+                }
+
+                if (!empty($rowData['Версия'])) {
+                    $rowDataModify['version'] = $rowData['Версия'];
+                }
+
+                if (!empty($rowData['Установок'])) {
+                    $rowDataModify['install_cnt'] = $rowData['Установок'];
+                }
+
+                if (!empty($rowData['Создано'])) {
+                    $rowDataModify['created'] = (new \DateTime($rowData['Создано']))->format('Y-m-d H:i:s');
+                }
+
+                if (!empty($rowData['Обновлено'])) {
+                    $rowDataModify['updated'] = (new \DateTime($rowData['Обновлено']))->format('Y-m-d H:i:s');
+                }
+
+                if (!empty($rowData['Статус'])) {
+                    $rowDataModify['status'] = $rowData['Статус'];
+                }
+
+                $result[] = $rowDataModify;
             }
         }
         return $result;
     }
 
-    public function getClientList($appId): array
+    public function getClientList($appId, $appCode, $startDate): array
     {
-        $result = [];
-        $page = 0;
-        while (++$page) {
-            $params = [
-                'query' => [
-                    'ID' => $appId,
-                    'nav-client' => 'page-' . $page,
-                ],
-            ];
-            $appListQuery = $this->client->request('get', static::$appClientListUrl, $params);
-            $appClientListContent = $appListQuery->getBody()->getContents();
+        $dateTime = new DateTime(date('d.m.Y'));
+        $params = [
+            'query' => [
+                'excel' => 'Y',
+                'sessid' => $this->sessionId,
+                'ID' => $appId,
+                'IFRAME' => 'Y',
+                'IFRAME_TYPE' => 'SIDE_SLIDER',
+                'DATE_INSERT_datesel' => 'interval',
+                'DATE_INSERT_days' => '',
+                'DATE_INSERT_from' => $startDate->format('d.m.Y'),
+                'DATE_INSERT_to' => $dateTime->format('d.m.Y'),
+                'HOST' => '',
+                'STATUS' => '',
+                'INSTALLED' => '',
+                'MEMBER_ID' => '',
+                'filter' => 'Найти',
+                'clear_filter' => ''
+            ],
+        ];
+        $queryPayments = $this->client->request('get', static::$appClientListUrl, $params);
+        $queryPaymentsContent = $queryPayments->getBody()->getContents();
 
-//            $appClientListContent = file_get_contents('./get_app_client_list_page1.html');
-            if ($this->debug)
-                file_put_contents(__DIR__ . '/get_app_client_list_page' . $page . '.html', $appClientListContent);
+        if ($this->debug)
+            file_put_contents(__DIR__ . '/queryAppClientsContent.csv', $queryPaymentsContent);
 
-            $source = mb_convert_encoding($appClientListContent, 'HTML-ENTITIES', 'utf-8');
-
-            $tableId = 'mp24_client';
-            $dom = new DOMDocument;
-
-            libxml_use_internal_errors(true);
-            $dom->loadHTML($source);
-            libxml_use_internal_errors(false);
-            $xpath = new DOMXPath($dom);
-
-            $headersData = $xpath->query("//table[@id='$tableId']/tr[@class='bx-grid-head']//td");
-            $headers = [];
-
-            foreach ($headersData as $header) {
-                $headerValue = trim($header->nodeValue);
-                if (empty($headerValue))
-                    $headerValue = 'actions';
-
-                $headers[] = $headerValue;
-            }
-
-            $tableData = $xpath->query("//table[@id='$tableId']/tr[not(@class='bx-grid-head') and not(@class='bx-grid-footer')and not(@class='bx-grid-gutter')]");
-
-            if ($this->debug) {
-                echo 'page:' . $page;
-                echo "\n";
-                echo 'count:' . count($tableData);
-                echo "\n";
-            }
-
-            //todo: [actions] => - Нет данных -, надо доп проверку. но сейчас не существенно
-            if (count($tableData) === 1) {
-                break;
-            }
-
-            foreach ($tableData as $row) {
-                $rowData = [];
-                $cellsData = $xpath->query("td", $row);
-                foreach ($cellsData as $index => $cell) {
-                    $rowData[$headers[$index]] = trim($cell->nodeValue);
+        $headerKey = [];
+        $lines = explode(PHP_EOL, $queryPaymentsContent);
+        $clientList = array();
+        foreach ($lines as $k => $line) {
+            $data = str_getcsv($line, ';');
+            if ($k === 0) {
+                $headerKey = $data;
+                array_pop($headerKey);
+            } elseif (count($data) > 1) {
+                $client = [];
+                foreach ($headerKey as $key => $keyName) {
+                    $value = $data[$key];
+                    $client[$keyName] = $value;
                 }
-                $result[] = $rowData;
+                $rowDataModify = [
+                    'app_code' => $appCode,
+                    'app_id' => $appId,
+                ];
+
+                if (!empty($client['Дата'])) {
+                    $rowDataModify['date_parse'] = (new \DateTime($client['Дата']))->format('Y-m-d');
+                }
+                if (!empty($client['Версия'])) {
+                    $rowDataModify['version'] = $client['Версия'];
+                }
+                if (!empty($client['Адрес сайта'])) {
+                    $rowDataModify['domain'] = $client['Адрес сайта'];
+                }
+                if (!empty($client['Тип клиента'])) {
+                    $rowDataModify['client_type'] = $client['Тип клиента'];
+                }
+                if (!empty($client['Портал id'])) {
+                    $rowDataModify['portal_id'] = $client['Портал id'];
+                }
+                if (!empty($client['Регион портала'])) {
+                    $rowDataModify['region'] = $client['Регион портала'];
+                }
+                if (!empty($client['Тариф'])) {
+                    $rowDataModify['tarif'] = $client['Тариф'];
+                }
+                if (!empty($client['Партнер id'])) {
+                    $rowDataModify['partner_id'] = $client['Партнер id'];
+                }
+                if (!empty($client['Тип'])) {
+                    $rowDataModify['type_sub'] = $client['Тип'];
+                }
+                if (!empty($client['Конец подписки'])) {
+                    $rowDataModify['sub_end_date'] = (new \DateTime($client['Конец подписки']))->format('Y-m-d');
+                }
+                if (!empty($client['Member id'])) {
+                    $rowDataModify['member_id'] = $client['Member id'];
+                }
+                if (!empty($client['Установлено'])) {
+                    $rowDataModify['setup'] = $client['Установлено'] == 'Y' ? 1 : 0;
+                }
+                $clientList[] = $rowDataModify;
             }
         }
-        return $result;
+        return $clientList;
     }
 }

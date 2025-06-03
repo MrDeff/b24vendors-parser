@@ -20,6 +20,28 @@ class Database
         $this->db->disconnectAll();
     }
 
+    public function clearPayments($date): void
+    {
+        $db = $this->db;
+        $db->where('DATE_OF_USE', $date, '>=');
+        $db->delete('payments');
+    }
+
+    public function clearPremiumPayments($date): void
+    {
+        $db = $this->db;
+        $db->where('DATE_PARSE', $date, '>=');
+        $db->delete('payments_premium');
+    }
+
+    public function clearAppClients($appCode, $date): void
+    {
+        $db = $this->db;
+        $db->where('app_code', $appCode);
+        $db->where('date_parse', $date, '>=');
+        $db->delete('app_clients');
+    }
+
     public function upsert($table, $fields): void
     {
         $db = $this->db;
@@ -30,69 +52,71 @@ class Database
         if ($table == 'payments_premium') {
             $db->where('hash', $fields['hash']);
         }
+
+        if ($table == 'app') {
+            $db->where('code', $fields['code']);
+        }
+
         $data = $this->db->get($table);
         if (!$data) {
             $this->db->insert($table, $fields);
         }
     }
+
+    public function upsertApp($fields): void
+    {
+        $db = $this->db;
+        $db->where('code', $fields['code']);
+        $db->where('region', $fields['region']);
+
+        $data = $db->get('app');
+
+        if (!$data) {
+            $db->insert('app', $fields);
+        } else {
+            $db->where('code', $fields['code']);
+            $db->where('region', $fields['region']);
+            $db->update('app', $fields);
+        }
+
+        $dbSearch = $dbInsert = $this->db;
+        $db->where('code', $fields['code']);
+        $data = $dbSearch->get('app_install');
+
+        $installData = ['code' => $fields['code'], 'install_cnt' => $fields['install_cnt'] ?? 0, 'date_parse' => (new DateTime(date('d.m.Y')))->format('Y-m-d')];
+        if (!$data) {
+            $dbInsert->insert('app_install', $installData);
+        } else {
+            $dbInsert->where('code', $fields['code']);
+            $dbInsert->update('app_install', $installData);
+        }
+    }
+
+    public function upsertAppClient($appCode, $appId, $fields): void
+    {
+        if (!isset($fields['member_id']) || empty($fields['member_id'])) {
+            if (!isset($fields['portal_id'])) {
+                $fields['member_id'] = $fields['domain'];
+            } else {
+                $fields['member_id'] = $fields['portal_id'];
+            }
+        }
+
+        $db = $this->db;
+        $db->where('app_code', $appCode);
+        $db->where('app_id', $appId);
+        $db->where('date_parse', $fields['date_parse']);
+        $db->where('member_id', $fields['member_id']);
+
+        $data = $db->get('app_clients');
+
+        if (!$data) {
+            $db->insert('app_clients', $fields);
+        } else {
+            $db->where('app_code', $appCode);
+            $db->where('app_id', $appId);
+            $db->where('member_id', $fields['member_id']);
+            $db->update('app_clients', $fields);
+        }
+    }
 }
-
-
-/*
---
--- Table structure for table `payments`
---
-
-CREATE TABLE IF NOT EXISTS `payments` (
-`ID` int(11) NOT NULL,
-  `DATE_OF_USE` date NOT NULL,
-  `APP_CODE` varchar(255) NOT NULL,
-  `CLIENT_NAME` varchar(255) NOT NULL,
-  `PARTNER` int(11) NOT NULL,
-  `SUBSCRIPTION_ID` int(11) NOT NULL,
-  `SUBSCRIPTION_TYPE` varchar(255) NOT NULL,
-  `SUBSCRIPTION_START` date NOT NULL,
-  `SUBSCRIPTION_END` date NOT NULL,
-  `MEMBER_ID` varchar(255) NOT NULL,
-  `MODE_OF_USE` varchar(255) NOT NULL,
-  `MODE_OF_USE_POINTS` int(11) NOT NULL,
-  `APP_TYPE` int(11) NOT NULL,
-  `APP_TYPE_POINTS` int(11) NOT NULL,
-  `POINTS` int(11) NOT NULL,
-  `ALL_POINTS` int(11) NOT NULL,
-  `AMOUNT` double NOT NULL,
-  `ALL_AMOUNT` double NOT NULL,
-  `CURRENCY` varchar(255) NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-
--- --------------------------------------------------------
-
---
--- Table structure for table `payments_premium`
---
-
-CREATE TABLE IF NOT EXISTS `payments_premium` (
-`DATE_PARSE` date NOT NULL,
-  `CLIENT_NAME` varchar(255) NOT NULL,
-  `MEMBER_ID` varchar(255) NOT NULL,
-  `TARIFF` varchar(255) NOT NULL,
-  `PARTNER` int(11) NOT NULL,
-  `TYPE` varchar(255) NOT NULL,
-  `APP_CODE` varchar(255) NOT NULL,
-  `APP_REMOVED` char(1) NOT NULL,
-  `POINTS` int(11) NOT NULL,
-  `ALL_POINTS` int(11) NOT NULL,
-  `AMOUNT` double NOT NULL,
-  `ALL_AMOUNT` double NOT NULL,
-  `CURRENCY` int(11) NOT NULL,
-  `SUBSCRIPTION_START` date NOT NULL,
-  `SUBSCRIPTION_END` date NOT NULL,
-  `SUBSCRIPTION_ID` int(11) NOT NULL,
-  `hash` varchar(255) NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-
-ALTER TABLE `payments` ADD PRIMARY KEY (`ID`);
-
-ALTER TABLE `payments_premium` ADD PRIMARY KEY (`hash`);
-
-*/
